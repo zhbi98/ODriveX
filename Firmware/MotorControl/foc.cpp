@@ -26,7 +26,7 @@ Motor::Error AlphaBetaFrameController::on_measurement(
         /*Ibeta 计算是使用对称变换矩阵时简化得到的，实际不是这样的*/
     }
     
-    /*注意调用的是 FOC 类对象的 on_measurement 函数（通过第二个形参可知一个是接收三相电流，
+    /*注意调用的是子类对象的 on_measurement 函数（典型的多态-运行时绑定）（通过第二个形参可知一个是接收三相电流，
     一个是接收 Ialpha, Ibeta）来更新 FOC 对象要用的 Ialpha, Ibeta 参数*/
     return on_measurement(vbus_voltage, Ialpha_beta, input_timestamp);
 }
@@ -52,7 +52,7 @@ Motor::Error AlphaBetaFrameController::get_output(
             uint32_t output_timestamp, float (&pwm_timings)[3],
             std::optional<float>* ibus) {
     std::optional<float2D> mod_alpha_beta;
-    Motor::Error status = get_alpha_beta_output(output_timestamp, &mod_alpha_beta, ibus);
+    Motor::Error status = get_alpha_beta_output(output_timestamp, &mod_alpha_beta, ibus); /*注意调用的子类对象的 on_measurement 函数（典型的多态-运行时绑定）*/
     
     if (status != Motor::ERROR_NONE) {
         return status;

@@ -114,8 +114,8 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
             axis.controller_.config_.control_mode = Controller::CONTROL_MODE_TORQUE_CONTROL;
         float torque_setpoint = *((float *)(&_data[1]));
         axis.controller_.input_torque_ = torque_setpoint;
-        /*当 CAN 通信中断时禁用电机。*/
-        axis.watchdog_feed();
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
+        axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
         break;
     }
     case 0x04: /*Set Velocity SetPoint*/
@@ -129,6 +129,7 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
             axis.controller_.config_.control_mode = Controller::CONTROL_MODE_VELOCITY_CONTROL;
         float vel_setpoint = *((float *)(&_data[1]));
         axis.controller_.input_vel_ = vel_setpoint;
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
         axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
         break;
     }
@@ -156,12 +157,18 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
             CAN_Send(&txHeader, _data);
         }
 
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
         axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
     }
         break;
     case 0x06: /*Set Position with Time*/
     {
         /*本质也是位置速度模式，设置时间后最终会限制迹速度确保在设定时间到达目标位置。*/
+        motor_id = _data[0];
+        if (motor_id < 0 || motor_id > 1) return 0;
+        Axis& axis = axes[motor_id];
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
+        axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
     }
         break;
     case 0x07: /*Set Position with Velocity-Limit*/
@@ -187,6 +194,7 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
         the position tracker, which needs the rated 
         speed to generate the process speed.*/
         axis.controller_.input_pos_updated();
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
         axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
     }
         break;
@@ -219,6 +227,7 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
         the position tracker, which needs the rated 
         speed to generate the process speed.*/
         axis.controller_.input_pos_updated();
+        /*通讯丢失防护，设定周期内没有收到 CAN 指令将自动退出“使能模式“防止失控*/
         axis.watchdog_feed(); /*当 CAN 通信中断时禁用电机。*/
     }
         break;
@@ -311,7 +320,10 @@ bool ODriveCAN::apply_cmd(uint8_t _cmd, uint8_t * _data, uint32_t _len)
         Axis& axis = axes[motor_id];
 
         uint32_t pre_calibrated = *((uint32_t *)(&_data[1]));
+        /*将编码器 pre_calibrated 设置为 True，表示编码器已校准，后续可直接使用*/
         axis.encoder_.config_.pre_calibrated = pre_calibrated;
+        /*将电机 pre_calibrated 设置为 True，表示电机已校准，后续可直接使用*/
+        axis.motor_.config_.pre_calibrated = pre_calibrated;
     }
         break;
     case 0x17: /*Set pos gain*/

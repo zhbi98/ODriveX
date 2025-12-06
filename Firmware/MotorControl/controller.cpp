@@ -171,11 +171,10 @@ static float limitVel(const float vel_limit, const float vel_estimate, const flo
 }
 
 /**
- * Controller::update 是电机位置闭环，速度闭环，电流闭环三环控制核心逻辑。注意：位置环只用 P，速度环用 PI，
- * 电流环用 PI。这样层层递进，响应快且易于调试（实际控制常见做法）。
- * 位置环输出的是速度设定值（vel_des），速度环再用 PI 控制，电流环用 PI 或更复杂控制，
- * 这样可以避免积分环节导致的漂移和不稳定。如果位置环加积分，可能会因编码器噪声或机械死
- * 区导致积分 “风暴”，影响系统稳定性。
+ * Controller::update 是电机位置闭环，速度闭环，电流闭环三环控制核心逻辑。注意：位置环只用比例控制 P（如果位置环加积分 I，
+ * 会因编码器噪声或机械死区导致积分风暴，影响系统稳定性），速度环，电流环用比例积分控制 PI。整个控制不需要微分控制 D，
+ * 因为微分带来的噪声放大和实现复杂度往往超过收益（实际控制中常见做法）。
+ * 位置环输出的是速度设定值（vel_des），速度环输出的是扭矩设定值 torque。
  */
 bool Controller::update() {
     /**从 Encoder 对象处实时获取电机位置估计值，pos_estimate_linear_src_，pos_estimate_circular_src_ 

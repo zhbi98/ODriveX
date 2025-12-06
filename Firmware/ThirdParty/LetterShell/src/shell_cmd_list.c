@@ -44,6 +44,8 @@ int cmd_axis_controller_config_pos_again(int motor_id, char * _pos_gain);
 int cmd_axis_controller_config_vel_gain(int motor_id, char * _vel_gain, char * _vel_igain);
 int cmd_axis_controller_config_control_mode(int motor_id, int _mode);
 int cmd_axis_controller_config_vel_limit(int motor_id, char * _vel_lim);
+int cmd_axis_config_motor_current_range(int motor_id, char * _current);
+int cmd_axis_encoder_pre_calibrated(int motor_id, int pre_calibrated);
 int cmd_config_dc_max_negative_current(char * _current);
 int cmd_can_set_nodeId(int nodeId);
 int cmd_can_set_baudrate(int baudrate);
@@ -132,6 +134,10 @@ const ShellCommand shellCommandList[] =
                    set_can_nodeId, cmd_can_set_nodeId, set_can_nodeId),
     SHELL_CMD_ITEM(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_FUNC),
                    set_can_baudrate, cmd_can_set_baudrate, set_can_baudrate),
+    SHELL_CMD_ITEM(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_FUNC),
+                   motor_current_range, cmd_axis_config_motor_current_range, motor_current_range),
+    SHELL_CMD_ITEM(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_FUNC),
+                   pre_calibrated, cmd_axis_encoder_pre_calibrated, pre_calibrated),
 };
 
 

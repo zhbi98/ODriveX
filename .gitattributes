@@ -1,0 +1,4 @@
+*.s linguist-language=c++
+*.c linguist-language=c++
+*.cpp linguist-language=c++
+*.html linguist-language=c++

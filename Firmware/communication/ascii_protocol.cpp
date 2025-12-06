@@ -177,6 +177,26 @@ extern "C" int cmd_config_dc_max_negative_current(char * _current)
 // @param pStr buffer of ASCII encoded values
 // @param response_channel reference to the stream to respond on
 // @param use_checksum bool to indicate whether a checksum is required on response
+extern "C" int cmd_axis_config_motor_current_range(int motor_id, char * _current)
+{
+    uint8_t len = strlen(_current);
+    double current = 0.0f;
+
+    if ((!len) || (len > 16)) return 0;
+
+    Axis& axis = axes[motor_id];
+    current = atof(_current);
+    axis.motor_.config_.requested_current_range = current;
+
+    logInfo("%5lf", current);
+
+    return 1;
+}
+
+// @brief Executes the set position command
+// @param pStr buffer of ASCII encoded values
+// @param response_channel reference to the stream to respond on
+// @param use_checksum bool to indicate whether a checksum is required on response
 void AsciiProtocol::cmd_set_position(char * pStr, bool use_checksum) {
     unsigned motor_number;
     float pos_setpoint, vel_feed_forward, torque_feed_forward;
@@ -1026,6 +1046,22 @@ extern "C" void dumperrors_any(const char * tttle, int motor_id,
         logInfo("Unknown error: 0x%08lX", 
             (uint32_t)error_);
     }
+}
+
+// @brief Executes the set position command
+// @param pStr buffer of ASCII encoded values
+// @param response_channel reference to the stream to respond on
+// @param use_checksum bool to indicate whether a checksum is required on response
+extern "C" int cmd_axis_encoder_pre_calibrated(int motor_id, int pre_calibrated)
+{
+    if (motor_id < 0 || motor_id > 1) return 0;
+    Axis& axis = axes[motor_id];
+    /*将编码器 pre_calibrated 设置为 True，表示编码器已校准，后续可直接使用*/
+    axis.encoder_.config_.pre_calibrated = pre_calibrated;
+    /*将电机 pre_calibrated 设置为 True，表示电机已校准，后续可直接使用*/
+    axis.motor_.config_.pre_calibrated = pre_calibrated;
+    logInfo("%d", pre_calibrated);
+    return 1;
 }
 
 // @brief Executes the read parameter command

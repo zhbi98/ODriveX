@@ -329,7 +329,8 @@ void Motor::update_current_controller_gains() {
     // Calculate current control gains
 
     /*根据电机 phase_inductance 和 phase_resistance 和电流控制带宽 current_control_bandwidth 
-    计算电流环的 P 增益 和 I 增益。这是基于模型的控制器调参（Model-Based Tuning），确保电流环的动态响应最优。*/
+    动态调整电流环的 P 比例增益和 I 积分增益参数。这是基于模型的控制器调参（Model-Based Tuning），
+    确保电流环的动态响应最优。最终更新到 pi_gains_*/
     float p_gain = config_.current_control_bandwidth * config_.phase_inductance;
     float plant_pole = config_.phase_resistance / config_.phase_inductance;
     current_control_.pi_gains_ = {p_gain, plant_pole * p_gain};
@@ -674,38 +675,32 @@ void Motor::update(uint32_t timestamp) {
      * 前馈控制主要应用于该控制系统本身存在较大的滞后作用，如果单单是在系统产生误差之后去控制的话 (PID)，
      * 那么系统总是跟在干扰后面波动，系统无法稳定。前馈的基本观点就是建立按扰动量进行补偿的开环控制，
      * 也就是说当影响系统的扰动出现时，按照扰动量的大小直接产生相应的矫正作用，抵消扰动的影响。
-     * 当控制算式选的恰当时，可以达到很高的控制精度。
-     * 反馈控制：也就是输出受到扰动影响后采取校正措施，因此反馈控制是闭环控制系统。
-     * 前馈控制：也就是在输出受到干扰之前采取纠正措施，前馈控制并不依赖于反馈信号。
+     * 比如说开车的时候，知道前面是上坡，为了保持一定的车速，你就已经提前给油加速。这就是前馈控制。
      */
 
-    /**
-     * 例如考虑一台热水器，要求在输入水温和水量变化时，维持输出水温不变。
-     * 反馈控制：出水水温低于设定值，则加大热源功率，出水水温高于设定值，则减小热源功率。
-     * 前馈控制：加装进水温度传感器和水量传感器，移除出水温度传感器，根据进水温度与目标温度的温差和水量，
-     * 直接计算得到所需的加热功率，然后直接调整热源。
-     */
-
-    /*根据 R-wL 开启/关闭前馈电压计算，根据电机相电感配置，得出反电动势扰动来计算前馈，调整更新 Vd, Vq 电压*/
-    /*前馈，反馈两者结合，前馈作为先导控制，反馈作为后随控制，保证控制系统极高的稳定性*/
-    if (config_.R_wL_FF_enable) { /*电阻 R 和电感 L 相关的前馈补偿*/
+    if (config_.R_wL_FF_enable) { /*检查是否开启电阻 R 和电感 L 相关的前馈补偿*/
         if (!phase_vel.has_value()) {
             error_ |= ERROR_UNKNOWN_PHASE_VEL;
             return;
         }
 
+        /*对 d/q 轴上电阻 R 和电感 L 引起电压降的预测做出前馈补偿，主要补偿 R·I 项和 ω·L × I 的交叉耦合项，
+        提前得出反电动势扰动来及时调整更新 Vd, Vq 电压，保证控制系统极高的及时性，让控制不滞后*/
+        /*要准确测量 phase_inductance 和 phase_resistance 否则误差会导致欠补偿或过补偿（可能振荡）。*/
         vd -= *phase_vel * config_.phase_inductance * iq;
         vq += *phase_vel * config_.phase_inductance * id;
         vd += config_.phase_resistance * id;
         vq += config_.phase_resistance * iq;
     }
 
-    if (config_.bEMF_FF_enable) { /*用于启用/禁用了反电动势前馈补偿*/
+    if (config_.bEMF_FF_enable) { /*检查是否开启反电动势前馈补偿*/
         if (!phase_vel.has_value()) {
             error_ |= ERROR_UNKNOWN_PHASE_VEL;
             return;
         }
 
+        /*前馈补偿提前在电机 Vq 上叠加补偿电压，用来抵消由于转子磁链在转速下产生的反电动势 e_q（感应电压），从而减小电流环/电压环的负担*/
+        /*电动势 e_q = ω_e·ψ = ω_e·(2/3)·(Kt/p), (Kt=扭矩常数, p = pole_pairs)，下面代码实现正是这个公式*/
         vq += *phase_vel * (2.0f/3.0f) * (config_.torque_constant / config_.pole_pairs);
     }
     
