@@ -10,7 +10,7 @@
  *
  */
 
-/* ==== ����һ���Զ����ɵ��ļ��� ���±���ʱ�Դ��ļ����κθ��Ķ�����ʧ�� ====*/
+/* ==== 这是一个自动生成的文件。 重新编译时对此文件的任何更改都将丢失。 ====*/
 
 #ifndef __FIBRE_INTERFACES_HPP
 #define __FIBRE_INTERFACES_HPP
@@ -27,7 +27,7 @@ struct Iph_ABC_t { float phA; float phB; float phC; };
 #pragma GCC push_options
 #pragma GCC optimize ("s")
 
-/*��Щ���붨�� ODrive �������࣬�ڲ�����󲿷�ͨ��Ԫ�ء�*/
+/*这些代码定义 ODrive 顶级父类，内部定义大部分通用元素。*/
 
 class ODriveIntf {
 public:
@@ -245,7 +245,7 @@ public:
     virtual void clear_errors() = 0;
 };
 
-/*��Щ���붨�� ODrive ���ִ���״̬ö�ٵİ�λ��������ء��������������ö��֧��λ��������������ͨ�����ڴ�������λ��־��bitflags�����͵�ö�١�*/
+/*这些代码定义 ODrive 各种错误状态枚举的按位运算符重载。其核心作用是让枚举支持位级别的运算操作，通常用于处理更新位标志（bitflags）类型的枚举。*/
 
 // this is technically not thread-safe but practically it might be
 /*inline ODriveIntf::Error operator | (ODriveIntf::Error a, ODriveIntf::Error b) 

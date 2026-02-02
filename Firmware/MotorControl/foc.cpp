@@ -178,7 +178,10 @@ ODriveIntf::MotorIntf::Error FieldOrientedController::get_alpha_beta_output(
         float Ierr_d = Id_setpoint - Id; /*期望扭矩电流 Id_setpoint 和实测电流 Id 之差*/
         float Ierr_q = Iq_setpoint - Iq; /*期望扭矩电流 Iq_setpoint 和实测电流 Iq 之差*/
 
-        // 电流闭环控制，这部分计算是 PI 电流控制器的输出，基于 Id 和 Iq 的 PI 控制（这里才是真正的电流/力矩环实现）。
+        /**电流闭环控制（这里才是真正的电流/力矩环实现）*/
+        /**电流环计算 P 项（d/q 轴电流误差乘以电流比例增益 p_gain）I 项（d/q 轴电流误差乘以电流积分增益后的累加值）
+         * 后再叠加由速度环的输出值转换而来的 Vd/q。（这就是实现级联 PID 外环输出如何施加给内环作为设定的问题）*/
+        /**注意电流环没有使用 PID 三项只使用典型的 PI 比例积分控制，不做电流误差微分*/
         // Apply PI control (V{d,q}_setpoint act as feed-forward terms in this mode)
         mod_d = V_to_mod * (Vd + v_current_control_integral_d_ + Ierr_d * p_gain);
         mod_q = V_to_mod * (Vq + v_current_control_integral_q_ + Ierr_q * p_gain);
@@ -194,6 +197,8 @@ ODriveIntf::MotorIntf::Error FieldOrientedController::get_alpha_beta_output(
             v_current_control_integral_d_ *= 0.99f;
             v_current_control_integral_q_ *= 0.99f;
         } else {
+            /*电流环电流误差积分计算，电流误差 Ierr_d/q 乘以电流积分增益 i_gain 以及乘以时间变化量 current_meas_period 后的累加值*/
+            /*current_meas_period 表示电流环积分控制部分的时间变化量 dt*/
             v_current_control_integral_d_ += Ierr_d * (i_gain * current_meas_period);
             v_current_control_integral_q_ += Ierr_q * (i_gain * current_meas_period);
         }

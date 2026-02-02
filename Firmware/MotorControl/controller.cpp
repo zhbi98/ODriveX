@@ -174,7 +174,7 @@ static float limitVel(const float vel_limit, const float vel_estimate, const flo
  * Controller::update 是电机位置闭环，速度闭环，电流闭环三环控制核心逻辑。注意：位置环只用比例控制 P（如果位置环加积分 I，
  * 会因编码器噪声或机械死区导致积分风暴，影响系统稳定性），速度环，电流环用比例积分控制 PI。整个控制不需要微分控制 D，
  * 因为微分带来的噪声放大和实现复杂度往往超过收益（实际控制中常见做法）。
- * 位置环输出的是速度设定值（vel_des），速度环输出的是扭矩设定值 torque。
+ * 位置环输出的是速度环设定值（vel_des），速度环输出的是扭矩/电流环设定值 torque。
  */
 bool Controller::update() {
     /**从 Encoder 对象处实时获取电机位置估计值，pos_estimate_linear_src_，pos_estimate_circular_src_ 
@@ -404,8 +404,9 @@ bool Controller::update() {
             pos_err = pos_setpoint_ - *pos_estimate_linear;
         }
 
-        /**这里是典型的比例控制，vel_des 即将位置误差乘以比例增益 
-         * (pos_gain)，并加到期望速度 vel_des 上。*/
+        /**把位置环的 P 项（位置误差乘以位置比例增益 pos_gain）输出叠加到速度环的期望/目标速度设定
+         *（即 vel_des）上。（这就是实现级联 PID 外环输出如何施加给内环作为设定的问题）*/
+        /**注意位置环没有使用 PID 三项只使用典型的 P 比例控制，不做位置误差积分/微分*/
         vel_des += config_.pos_gain * pos_err;
         // V-shaped gain shedule based on position error
         float abs_pos_err = std::abs(pos_err);
@@ -477,9 +478,10 @@ bool Controller::update() {
             return false;
         }
 
-        v_err = vel_des - *vel_estimate;
-        /**torque 即将位置误差乘以比例增益 (vel_gain)，
-         * 并加到期望力矩 torque 上。这里是典型的比例控制*/
+        v_err = vel_des - *vel_es timate;
+        /**把速度环的 P 项（速度误差乘以速度比例增益 vel_gain）I 项（速度误差乘以速度积分增益后的累加值）
+         * 输出叠加到扭矩环的期望/目标速度设定（即 torque）上。（这就是实现级联 PID 外环输出如何施加给内环作为设定的问题）*/
+        /**注意速度环没有使用 PID 三项只使用典型的 PI 比例积分控制，不做速度误差微分*/
         torque += (vel_gain * gain_scheduling_multiplier) * v_err;
 
         // Velocity integral action before limiting（速度环积分控制）
@@ -499,11 +501,11 @@ bool Controller::update() {
         torque = limitVel(config_.vel_limit, *vel_estimate, vel_gain, torque);
     }
 
-    /*注意：实际电路电流大小没有传递到这里的所谓电流闭环控制参与计算，这里的
-    电流闭环控制只负责计算出目标扭矩/电流，最终目标扭矩会传递给电流控制器
-    （通常在 FieldOrientedController 相关模块，采集实际电流值如 
-    Iq_measured_, Id_measured_），电流控制器会根据这个目标扭矩和获取实际
-    电路电流大小，执行 PI 闭环计算，基于计算结果调整驱动信号，实现电流环闭环。*/
+    /**注意：没有在这里实现电流环控制，只是在这里接收外部设置的目标扭矩参数 torque，
+    并做一些扭矩大小限制操作，同时在多环同时工作的模式下，叠加位置环和速度环的输出。
+    然后这个处理后的目标扭矩会传递给电流控制器（通常在 FieldOrientedController 相关模块），
+    电流控制器会采集实际电流值 Iq_measured_, Id_measured_，并根据目标扭矩 torque，
+    执行 PI 闭环计算，基于计算结果调整驱动信号，实现电流闭环。*/
 
     // Torque limiting
     bool limited = false;
@@ -525,7 +527,9 @@ bool Controller::update() {
             // TODO make decayfactor configurable
             vel_integrator_torque_ *= 0.99f;
         } else {
-            /*根据速度误差 v_err，用速度积分增益 vel_integrator_gain 进行积分累加*/
+            /*速度环速度误差积分计算，速度误差 v_err 乘以速度积分增益 vel_integrator_gain 以及乘以时间变化量 current_meas_period 后的累加值*/
+            /*速度积分增益 vel_integrator_gain 还乘以倍率 gain_scheduling_multiplier 防止过度增益*/
+            /*current_meas_period 表示速度环积分控制部分的时间变化量 dt*/
             vel_integrator_torque_ += ((vel_integrator_gain * gain_scheduling_multiplier) * current_meas_period) * v_err;
         }
         // integrator limiting to prevent windup（做防积分饱和处理）

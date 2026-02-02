@@ -1,68 +1,172 @@
 ## ODriveX
 
-一款基于 STM32F405 的高性能开源磁场定向控制（FOC）驱动器，逆变电路采用了英飞凌的 DirectFET-MOS 管，支持高达 100A 持续电流 和 3kW 电机功率，适用于机器人、无人机、CNC 等高动态应用场景。
+无刷电机和有刷电机最大的区别就是没有 “有刷电机” 的机械换向（电刷），无刷电机是通过电子换向来驱动转子不断地转动，电机的电压和 KV 值决定了电机转速，而电机的转速就决定了换向的频率。
 
 ![image.png](./Image/20240122202914.jpg)
 
-## 核心特性
+**而这个换向的操作，就是需要驱动器去完成的**，所以无刷电机需要驱动器。**ODriveX** 除了实现必须的 **换向操作** 还额外实现了：
 
-(1) 高性能功率级：英飞凌 DirectFET MOSFET，60V 耐压，单路 100A 峰值电流
-
-(2) 多总线通信：USB-CDC、UART、RS485（Modbus RTU）、CAN 2.0B
-
-(3) 高精度反馈：支持 AS5047P（14-bit SPI）、ABI 编码器、UVW 霍尔
-
-(4) 现代开发栈：CMake + ARM-GCC + VSCode + OpenOCD 图形化调试
-
-(5) 完整 FOC 控制：电流/速度/位置三闭环，支持 SVPWM、死区补偿、弱磁控制
-
-(6) Step/Dir 兼容：可对接传统运动控制器（如 GRBL、Marlin）
+(1) 位置闭环 (2) 速度闭环 (3) 电流闭环 PID 闭环机制。
 
 ## 硬件
 
-硬件涉及两部分，驱动器主体（驱动器硬件命名为 MotorKit）和编码器模块（AS5047P-Driver）。PCB 打样使用制造输出文件（Gerber），打样时把所有 Gerber 文件压缩为 .zip 文件提供给 PCB 制造商（例如嘉立创）即可，PCB 经过我打样验证无误，Gerber 文件在 HardWare/Gerber 目录下，可直接使用。
+(1) 三相逆变功率级：英飞凌耐压 60V，载流100A 的 DirectFET MOSFET 开关管（基于成本考虑可以选择其他的型号）。
 
-原理图和 PCB 使用开源 EDA 工具 KiCAD 设计的，如果你有 KiCAD 也知道怎么使用，可以自己去导出 Gerber 文件。
+(2) MOS 栅极驱动 IC：TI 德州仪器 Drv8301（半桥驱动电路的实现比较复杂，要考虑开关管的开关频率、开启和关断时间不对称、死区问题等等，所以使用集成 MOS 驱动芯片）。
 
-PCB 采用 4层板设计，如果要编辑 PCB 需要下载 KiCAD，还需要看些教程熟悉使用方法，当然这个 EDA 工具本身也非常易学。
+> Drv8301 集成 DCDC 电源，可以输出为 CAN/RS485 提供 +5V 供电。
 
-购买电子元器件按照 HardWare 目录下的 ibom.html 表格购买。
+(3) RS485 收发器：TI 德州仪器 SN75176B（基于成本考虑可以选择其他的型号）。
 
-KiCAD 官方下载链接： https://www.kicad.org/
+(4) CAN2.0B 收发器：NXP 恩智浦 High-speed CAN transceiver TJA1051（基于成本考虑可以选择其他的型号）。
 
-驱动器主体 KiCAD 工程目录：HardWare/kiacd_project
+(5) 磁编码器：Ams 艾迈斯 AS5047P-ATSM 增量式编码器。
 
-编码器模块 KiCAD 工程目录：HardWare/AS5047P/HardWare/kiacd_project
+(6) 主控 MUC 芯片：意法半导体 STM32F405。
 
-制造输出文件（Gerber）目录：HardWare/Gerber
+## 关于打样
 
-器件 BOM 目录：HardWare/ibom.html
+ODriveX 硬件 PCB 分为以下两部分（编码器 AS5047P 集成到电机和驱动器分离）：
 
-## 固件
+驱动器板 MotorKit（PCB 采用 **4 层板** 设计）：[HardWare/kiacd_project](./HardWare/kiacd_project) 
 
-程序固件使用 CMake 进行构建的，然后用 ARM-GCC 进行编译的，并且可以搭配 VSCode 和 OpenOCD 进行图形化调试，当然你可以新建一个 STM32F405 的 Keil 工程，把程序组织到 Keil 中编译也可以。
+编码器板 AS5047P-Driver：[HardWare/AS5047P/HardWare](./HardWare/AS5047P/HardWare)
 
-使用 CMake 要求会编写 CMakeLists.txt 文件，不过我这里已经编写好了，在 Firmware 目录下可以看到。
+> 如果想自己修改 PCB 需要安装 KiCad（开源的 EDA 工具，也非常易学），官方下载地址：[https://www.kicad.org/](https://www.kicad.org/)。
 
-PCB 上预留了 SWD 调试接口，固件固件就可以使用 SWD 下载。
+打样制作可以直接进入到下面这两个路径下：
 
-如果没有 VSCode 的嵌入式开发环境，可以看看这篇文章：https://blog.csdn.net/jf_52001760/article/details/126826393
+把 MotorKit Gerber 文件夹 [HardWare/Gerber](./HardWare/Gerber) 压缩为 MotorKit.zip
 
-## 电机
+把 AS5047P Gerber 文件夹 [HardWare/AS5047P/HardWare/Gerber](./HardWare/AS5047P/HardWare/Gerber) 压缩为 AS5047P.zip
 
-我购买的无刷电机是大疆精灵 3 的拆机无刷电机 2312S 可以在淘宝搜索购买，电机到手后还要进行改装，在电机轴上安装供编码器检测的径向磁铁，磁铁尺寸为 6mmx2mm，磁铁安装注意同心度不要过度偏移，磁铁与编码器的间隙大概为 1.0mm。然后再把把 AS5047 编码器模块固定到电机尾部。
+把这两个 `.zip` 给 PCB 制造厂即可（例如 JLC，**PCB 经过打样验证，可以放心使用**）。
+
+**器件 BOM 目录**：[HardWare/ibom.html](./HardWare/ibom.html)（PCB 没器件位号，按网页交互式 BOM 贴片）。
+
+## 核心固件
+
+固件主要包括几大功能模块：
+
+- Board 驱动：板载的各种硬件驱动比如 USB、编码器、CAN
+- ThirdParty库：ARM的CMSIS驱动，ST官方的HAL库，包括 FreeRTOS 支持包，LetterShell 的终端命令行实现
+- Drivers：DRV8301 栅极驱动配置，STM32 GPIO，SPI 抽象/对象化，非易失储存等等
+- MotorControl：电机控制核心代码，包括 FOC，三环控制器，电流采集，校准等等（想了解 FOC 控制的看这部分代码即可）
+- communication：上层 CAN 控制应用协议，可以基于 ODriveX 提供的协议控制同步电机状态/参数。
+
+## 编译下载
+
+固件没有使用 ARM Keil 开发，而是先用 CMake 构建出 Makefile，然后再用 arm-gcc 编译（可以自己创建 F405 的 Keil 工程，把 ODriveX 组织到 Keil 编译）。
+
+ODriveX 用的是 VSCode 搭配 OpenOCD 图形化下载调试，需要下载安装下列工具链：
+
+MiniGW： https://sourceforge.net/projects/mingw-w64/files/
+
+arm-gcc ： [Downloads | GNU Arm Embedded Toolchain Downloads – Arm Developer](https://developer.arm.com/downloads/-/gnu-rm)
+
+openOCD： [Download OpenOCD for Windows](https://gnutoolchains.com/arm-eabi/openocd/)
+
+CMake： [Download CMake](https://cmake.org/download/)
+
+VSCode： [https://code.visualstudio.com/](https://code.visualstudio.com/)
+
+> 安装后具体如何配置使用这些工具，篇幅较长不写在这里，我把具体配置使用方法写在这里： [工具链配置使用方法](https://blog.csdn.net/jf_52001760/article/details/126826393)。
+
+**ODriveX 编译步骤**：
+
+![image.png](./Image/20260131113520.jpg)
+
+(2) 在 Firmware 目录下创建 build 目录，并指定到 `2` 这里。
+
+(3) 点击 "Configure"，在弹出面板选择目标工程，如下图。
+
+![image.png](./Image/20260131114821.jpg)
+
+(5) 在 vscode 的命令行 `cd build` 进入 `build/` 目录，然后执行 make -j2 即可开始编译。
+
+![image.png](./Image/20260131134502.jpg)
+
+(6) 使用 openOCD 把 `.elf` 文件下载到 ODriveX 硬件，下载方法同样参照 [工具链配置使用方法](https://blog.csdn.net/jf_52001760/article/details/126826393)（PCB 上预留了 SWD 调试接口同时支持固件下载）。
+
+## 电机选型
+
+我购买的是大疆 2312S 无刷电机（大疆精灵 3 无人机的拆机电机），可以在淘宝搜索购买。
+
+Rated working voltage of single motor: 14.4 V
+
+Rated working current of single motor: 2.5 A (Maximum current is 10.5 A when there is no payload)
+
+Maximum speed: 8500 rpm
+
+极对数 pole pairs 为 7
+
+> 什么是极对数？
+> 
+> 极数是指电机转子（即永磁体部分）磁场中磁极的总数量，磁极总数除以 2 就是极对数，极对数用 P 表示，每个极对包含一个北磁极 N 和一个南磁极 S。
+
+## 编码器安装
+
+在电机轴上安装径向磁铁（用于磁编码器检测），磁铁尺寸 $d=6mm$，$h=2mm$，注意径向磁铁和轴同心度不要过度偏移，然后把 AS5047P 编码器模块用 M2.5 螺丝固定到电机尾部，磁铁与编码器的间隙大概为 $1.0mm$。
 
 ![image.png](./Image/20240223214634.jpg)
 
+编码器使用 ABZ 接口（外接的编码器通信线较长，建议使用 ABZ 接口，通信更稳定）。
+
+## 安装 USB 驱动
+
+将 ODrive供电，通过USB线缆连接电脑。
+
+下载并打开 `zadig`，zadig 这里下载 [https://zadig.akeo.ie/](https://zadig.akeo.ie/)。
+
+列表所有设备 `Options` - `List All Devices`。
+
+![image.png](./Image/6ebcf38c766d3165.png)
+
+选择 `ODrive 3.6 Native Interface`（注意不要选择 CDC）。
+
+![image.png](./Image/24b61c34104c2898.png)
+
+点击下拉列表，选择 `libusb-win32` 驱动，点击 `Replace Driver` 替换驱动。
+
+![image.png](./Image/fdaa07e0cd0b2ec5.png)
+
+等待驱动安装完成。
+
+![image.png](./Image/a48c45888aeae0eb.png)
+
 ## Configuration
 
-控制参数（例如 PID，电流，速度限制等等）都是包含默认值的，所以不需要逐个配置参数电机也能正常工作起来的，必须要注意的是根据实际编码器配置 cpr（例如 AS5047P 编码器使用 ABZ 接口时 CPR 为 1000x4=4000），index 参数，根据电机配置极对数 pole pairs（例如大疆 2312s 电机的极对数为 7），以及按实际调整电流采样电阻，配置一些必须变更的即可。
+控制参数（例如 PID，电流，速度，扭矩限制等等）都是包含默认值的，所以不需要逐个配置参数电机也能正常工作起来的。
 
-什么是极对数？
+**必须要注意修改的是**：根据实际编码器配置 cpr（例如 AS5047P 编码器使用 ABZ 接口时 cpr 为 1000x4=4000），index 参数，根据电机配置极对数 pole pairs（例如大疆 2312s 电机的极对数为 7），以及按实际调整电流采样电阻，配置一些必须变更的即可。
 
-极数是指电机转子（即永磁体部分）磁场中磁极的总数量，磁极总数除以 2 就是极对数，极对数用 P 表示，每个极对包含一个北磁极 N 和一个南磁极 S。
+**配置方法：**
+
+用 USB 数据线连接 ODriveX 和 PC，在 PC 用串口调试助手（建议使用 MobaXterm）下发指令配置，常用的 Shell 配置命令实现在这边 [shell_cmd_list.c](./Firmware/ThirdParty/LetterShell/src/shell_cmd_list.c)。
+
+更深入的配置可以在代码中配置，参数集中在每个对象 class 的 `struct Config_t` 字段，修改它们就会改变配置，例如 Motor 对象：
+
+```cpp
+class Motor : public ODriveIntf::MotorIntf {
+public:
+    struct Config_t {
+        bool pre_calibrated = false; // can be set to true to indicate that all values here are valid
+        int32_t pole_pairs = 7;
+        float calibration_current = 10.0f;    // [A]
+        float resistance_calib_max_voltage = 2.0f; // [V] - You may need to increase this if this voltage isn't sufficient to drive calibration_current through the motor.
+        float phase_inductance = 0.0f;        // to be set by measure_phase_inductance
+        float phase_resistance = 0.0f;        // to be set by measure_phase_resistance
+        ...
+        ...
+    }
+}
+```
 
 ## Start-up
+
+> ODriveX 初次启动需要校准电机（实际就是测量电机的相电阻和相电感），校准编码器（偏移 Offset 校准）。
+
+ODriveX 使用时基本的启动流程：
 
 (1) 电机校准（实际就是测量电机的相电阻和相电感）。
 
@@ -78,35 +182,46 @@ PCB 上预留了 SWD 调试接口，固件固件就可以使用 SWD 下载。
 
 (7) 电机因异常停止后清除错误重新使能进入闭环状态即可。
 
-## Command
+**对应操作命令：**
 
-CAN 通信协议和 Shell 交互命令实现分别位于 [communication/can/odrive_can.cpp](communication/can/odrive_can.cpp) 和 [ThirdParty/LetterShell/src/shell_cmd_list.c](ThirdParty/LetterShell/src/shell_cmd_list.c) 文件，具体可查看这两个文件，这里列出电机运行起来必要的 Shell 指令，使用 USB 数据线线连接板子 TypeC 和 PC，在 PC 上使用串口调试助手
-下发下列指令即可控制。
+用 USB 数据线连接 ODriveX 和 PC，在 PC 用串口调试助手（建议使用 MobaXterm）下发下列指令即可（注意浮点参数需要包含双引号）。
 
 ```cpp
-设置最大负电流
+(1) 设置最大负电流
 odrive:/$ dc_max_negative_current "-2.0"
 
-速度限制 50 turn/s
+(2) 设置速度限制 50 turn/s
 odrive:/$ controller_config_vel_limit 0 "50.0"
 
-设置电机 0 进入校准状态
+(3) 设置电机 0 进入校准状态
 odrive:/$ axis_requested_state 0 3
 
-设置电机 0 进入力矩控制模式
+(4) 设置电机 0 进入力矩控制模式
 odrive:/$ controller_config_control_mode 0 1
 
-设置电机 0 控制力矩
+(5) 设置电机 0 控制力矩
 odrive:/$ controller_input_torque 0 "0.02"
 
-进入闭环
+(6) 进入闭环
 odrive:/$ axis_requested_state 0 8
 
-打印当前错误
+(7) 如果发生错误，可以打印当前错误并清除错误状态
 odrive:/$ dump_errors 1
 ```
 
-## Step/Dir
+以上也是电机运行起来必要的 Shell 指令，保存过校准参数的电机可以跳过发送校准指令。
+
+## Shell Command
+
+Shell 交互命令实现位于 [ThirdParty/LetterShell/src/shell_cmd_list.c](ThirdParty/LetterShell/src/shell_cmd_list.c) 文件，具体可查看这个文件。
+
+## CAN Protocols
+
+CAN 控制协议实现分别位于 [communication/can/odrive_can.cpp](communication/can/odrive_can.cpp) 文件，具体可查看这个文件。
+
+## 其他
+
+**Step/Dir：**
 
 Choose any two of the unused GPIOs for step/dir input. Let’s say you chose GPIO7 for the step signal and GPIO8 for the dir signal.
 
