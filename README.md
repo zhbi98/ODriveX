@@ -142,7 +142,7 @@ Maximum speed: 8500 rpm
 
 **配置方法：**
 
-用 USB 数据线连接 ODriveX 和 PC，在 PC 用串口调试助手（建议使用 MobaXterm）下发指令配置，常用的 Shell 配置命令实现在这边 [shell_cmd_list.c](./Firmware/ThirdParty/LetterShell/src/shell_cmd_list.c)。
+ODriveX 连接 PC，在 PC 用串口调试助手（建议使用 MobaXterm）下发 Shell 指令修改电机配置，常用的 Shell 命令看 [shell_cmd_list.c](./Firmware/ThirdParty/LetterShell/src/shell_cmd_list.c) 这里。
 
 更深入的配置可以在代码中配置，参数集中在每个对象 class 的 `struct Config_t` 字段，修改它们就会改变配置，例如 Motor 对象：
 
@@ -162,62 +162,151 @@ public:
 }
 ```
 
-## Start-up
+## 关于校准
 
-> ODriveX 初次启动需要校准电机（实际就是测量电机的相电阻和相电感），校准编码器（偏移 Offset 校准）。
+初次启动要校准电机和编码器，校准时电机最好不要携带负载，保证能自由转动。
+
+> ODriveX 连接 PC，在 PC 用串口终端（例如 MobaXterm）或串口调试助手（例如 sscom）向驱动器发送下面的 Shell 指令。
+
+**校准电机**：
+
+```cpp
+odrive:/$ axis_requested_state 0 4 /**< 0 指电机id号*/
+```
+
+校准过程会测量电机相电阻、电机相电感，并根据相电阻相电感自动生成电流环 PI 增益，当听到电机发出 “哔” 声后表示测量完成。
+
+**校准编码器**：
+
+定位编码器索引信号，启动后将开环控制电机朝着一个方向旋转直到检测到索引脉冲信号时停止（找编码器器零点：驱动电机和编码器参考零点位置对齐）。
+
+```cpp
+odrive:/$ axis_requested_state 0 6 /**< 0 指电机id号*/
+```
+
+编码器偏移校准，启动后将开环控制电机朝着一个方向正转一圈然后反方向反转一圈后停止，开环旋转时的电流（扭矩）大小由 motor.config.calibration_current 参数决定。
+
+```cpp
+odrive:/$ axis_requested_state 0 7 /**< 0 指电机id号*/
+```
+
+> 其实这上面这 3 个步骤可以用下面这条指令一步完成
+> 
+> ```cpp
+> odrive:/$ axis_requested_state 0 3 /**< 0 指电机id号*/
+> ```
+
+**设置预校准**：
+
+将电机和编码器的 pre_calibrated 设置为 True，表示电机和编码器已校准，下次重新启动可以不用再次校准。
+
+```cpp
+pre_calibrated 0 1 /**< 0 指电机id号*/
+```
+
+> 注意：即使设置了 **预校准**，对于增量编码器（非绝对值编码器）每次重新启动后都需要编码器索引校准（即：找编码器器零点 INDEX_SEARCH），但不用偏移校准。如果编码器没有索引信号 Z (只有 AB) 则每次重新启动都要编码器偏移校准。
+
+**保存校准结果**：
+
+如果不保存下次启动要再次校准，执行后驱动器将自动检查电机的参数保存并重启。
+
+```cpp
+dev_config "save"
+```
+
+**提示**：
+
+> 每个步骤执行完后用这条指令列出错误信息
+> 
+> odrive:/$ dump_errors 1
+> 
+> 参数 1 指的是列出错误的同时清除错误状态
+
+如果没有错误则电机状态 OK，可以进行后续步骤，出现错误则要根据错误信息分析原因，然后清除错误后重试。
+
+## Start-up
 
 ODriveX 使用时基本的启动流程：
 
-(1) 电机校准（实际就是测量电机的相电阻和相电感）。
+(1) 设置电流，速度限制参数（防止限值太小出现超限错误）。
 
-(2) 搜索定位编码器 index 信号（在编码器偏移校准之前必须先搜索 index）。
+(2) 电机校准（实际就是测量电机的相电阻和相电感）。
 
-(3) 编码器偏移校准（Offset 校准）。
+(3) 搜索定位编码器 index 信号（在编码器偏移校准之前必须先搜索 index）。
 
-(4) 使能闭环状态/开环状态。
+(4) 编码器偏移校准（Offset 校准）。
 
-(5) 设置控制模式（控制模式包含：位置模式，速度模式，电流模式）。和 (4) 结合起来就得到，位置闭环控制模式，速度闭环控制模式，电流闭环控制模式。
+(5) 使能闭环状态/开环状态。
 
-(6) 设置控制模式目标值（位置值，速度值，电流值）来调节电机运行状态。
+(6) 设置控制模式（控制模式包含：位置模式，速度模式，电流模式）。和 (4) 结合起来就得到，位置闭环控制模式，速度闭环控制模式，电流闭环控制模式。
 
-(7) 电机因异常停止后清除错误重新使能进入闭环状态即可。
+(7) 设置控制模式目标值（位置值，速度值，电流值）来调节电机运行状态。
 
-**对应操作命令：**
+(8) 电机因异常停止后清除错误重新使能进入闭环状态即可。
 
-用 USB 数据线连接 ODriveX 和 PC，在 PC 用串口调试助手（建议使用 MobaXterm）下发下列指令即可（注意浮点参数需要包含双引号）。
+**对应操作命令：（注意浮点参数需要包含双引号）**
 
 ```cpp
 (1) 设置最大负电流
 odrive:/$ dc_max_negative_current "-2.0"
 
 (2) 设置速度限制 50 turn/s
-odrive:/$ controller_config_vel_limit 0 "50.0"
+odrive:/$ controller_config_vel_limit 0 "50.0" /**< 0 指电机id号*/
 
 (3) 设置电机 0 进入校准状态
-odrive:/$ axis_requested_state 0 3
+odrive:/$ axis_requested_state 0 3 /**< 0 指电机id号*/
 
 (4) 设置电机 0 进入力矩控制模式
-odrive:/$ controller_config_control_mode 0 1
+odrive:/$ controller_config_control_mode 0 1 /**< 0 指电机id号*/
 
 (5) 设置电机 0 控制力矩
-odrive:/$ controller_input_torque 0 "0.02"
+odrive:/$ controller_input_torque 0 "0.02" /**< 0 指电机id号*/
 
 (6) 进入闭环
-odrive:/$ axis_requested_state 0 8
+odrive:/$ axis_requested_state 0 8 /**< 0 指电机id号*/
 
 (7) 如果发生错误，可以打印当前错误并清除错误状态
 odrive:/$ dump_errors 1
 ```
 
-以上也是电机运行起来必要的 Shell 指令，保存过校准参数的电机可以跳过发送校准指令。
+以上也是电机运行起来必要的 Shell 指令，保存过校准参数的电机可以跳过 `(3)` 这一步。
 
 ## Shell Command
 
-Shell 交互命令实现位于 [ThirdParty/LetterShell/src/shell_cmd_list.c](ThirdParty/LetterShell/src/shell_cmd_list.c) 文件，具体可查看这个文件。
+我移植了 Letter shell，让 ODriveX 可以像 Linux 一样使用 Shell 命令操作，Shell 支持配置电机参数，读写参数变量，或实时 PID 调参。
+
+> Letter shell 是一个可以嵌入在程序中的嵌入式 Shell，面向嵌入式设备，以 C 语言函数为运行单位，可以通过命令行调用，运行程序中的函数。
+
+具体命令在 [ThirdParty/LetterShell/src/shell_cmd_list.c](./Firmware/ThirdParty/LetterShell/src/shell_cmd_list.c) 这里定义，具体可以看这个文件。
 
 ## CAN Protocols
 
-CAN 控制协议实现分别位于 [communication/can/odrive_can.cpp](communication/can/odrive_can.cpp) 文件，具体可查看这个文件。
+ODriveX 支持 CAN 通信方式，最高支持 1MBps 波特率。
+
+CAN 报文格式定义如下：
+
+![image.png](./Image/Can-Message.jpg)
+
+CAN 报文通常三个参数，Motor id 占用一个字节，参数 1 占用 4 个字节，参数 2 占用 3 个字节，由于参数 2 只有 3 个字节所以无法直接传递浮点数，要用整数量化浮点数。
+
+> 其实 Motor id 不必占用一个字节，用 3 位 表示即可，虽然节约位数，但这样一来后面表示浮点参数的位数会变得非常割裂，取值要位操作可读性差。
+
+在下发控制报文时，需要把目标值的浮点数转为整形填入报文，参考转换方法如下，需要传入范围值与目标值，以及数据占用的位数。
+
+```cpp
+uint32_t ODriveCAN::fto_i(float x, float x_min, float x_max, uint8_t bits)
+{
+    float span = x_max - x_min; /*浮点范围*/
+    float ref = x_min; /*输入范围起点*/
+
+    if (x < x_min) x = x_min;
+    else if (x > x_max) x = x_max;
+
+    return (uint32_t)((x - ref) * ((float)((1 << bits) - 1)) / span);
+}
+```
+
+具体指令在 [communication/can/odrive_can.cpp](./Firmware/communication/can/odrive_can.cpp) 这里定义，具体可以看这个文件。
 
 ## 其他
 
