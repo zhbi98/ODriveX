@@ -39,6 +39,7 @@ bool TrapezoidalTrajectory::planTrapezoidal(float Xf, float Xi, float Vi,
 
     // Integral of velocity ramps over the full accel and decel times to get
     // minimum displacement required to reach cuising speed
+    // 如果能跑到最大速度，那么计算加速阶段和减速阶段运行的位移
     float dXmin = 0.5f*Ta_*(Vr_ + Vi) + 0.5f*Td_*Vr_;
 
     // Are we displacing enough to reach cruising speed?
@@ -63,6 +64,29 @@ bool TrapezoidalTrajectory::planTrapezoidal(float Xf, float Xi, float Vi,
     return true;
 }
 
+/*******************************************************************************************************
+ * ```markdown
+ * (1) 加速阶段的位移，加速到最大速度 $V_{max}$ 时位移为：
+ * $$ d_{accel}=\frac{V_{max}^{2}-V_{i}^{2}}{2A_{max}} $$
+ * 其中 $V_{max}$ 为最大速度，$V_{i}$ 为初始速度，$A_{max}$ 为最大加速度。
+ * 
+ * (2) 减速阶段位移，从最大速度 $V_{max}$ 减速到 0 时的位移为：
+ * $$d_{decel}=\frac{V_{max}^{2}}{2D_{max}}$$
+ * 
+ * (3) 总位移，两个阶段的位移之和：
+ * $$
+ * \begin{align*}
+ * dX &= d_{accel}+d_{decel} \\
+ * &= \frac{V_{max}^{2}-V_{i}^{2}}{2A_{max}} + \frac{V_{max}^{2}}{2D_{max}} \\
+ * \end{align*}
+ * $$
+ * 
+ * (4) 解除最大速度，把速度带入解除最大速度 $V_{max}$ 为：
+ * $$V_{max}=\sqrt{\frac{(D_{max} \cdot V_{i}^{2})+2A_{max} \cdot D_{max} \cdot dX}{D_{max}-A_{max}}}$$
+ * ```
+*******************************************************************************************************/
+
+/**调用 eval 函数不断的计算出下一时刻的目标位置和速度*/
 TrapezoidalTrajectory::Step_t TrapezoidalTrajectory::eval(float t) {
     Step_t trajStep;
     if (t < 0.0f) {  // Initial Condition

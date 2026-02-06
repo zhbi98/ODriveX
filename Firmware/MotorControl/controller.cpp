@@ -34,6 +34,7 @@ void Controller::move_to_pos(float goal_point) {
                                  axis_->trap_traj_.config_.vel_limit,
                                  axis_->trap_traj_.config_.accel_limit,
                                  axis_->trap_traj_.config_.decel_limit);
+    /*需要控制电机以梯形轨迹运动到某个位置时，会调用该函数。*/
     axis_->trap_traj_.t_ = 0.0f;
     trajectory_done_ = false;
 }

@@ -49,10 +49,12 @@ ODriveX 硬件 PCB 分为以下两部分（编码器 AS5047P 集成到电机和�
 固件主要包括几大功能模块：
 
 - Board 驱动：板载的各种硬件驱动比如 USB、编码器、CAN
-- ThirdParty库：ARM的CMSIS驱动，ST官方的HAL库，包括 FreeRTOS 支持包，LetterShell 的终端命令行实现
+- ThirdParty库：ARM的CMSIS驱动，ST官方的HAL库，包括 FreeRTOS 支持包，LetterShell 嵌入式 Shell 库。
 - Drivers：DRV8301 栅极驱动配置，STM32 GPIO，SPI 抽象/对象化，非易失储存等等
 - MotorControl：电机控制核心代码，包括 FOC，三环控制器，电流采集，校准等等（想了解 FOC 控制的看这部分代码即可）
 - communication：上层 CAN 控制应用协议，可以基于 ODriveX 提供的协议控制同步电机状态/参数。
+
+![image.png](./Docs/565987b0d060.png)
 
 ## 编译下载
 
@@ -281,17 +283,17 @@ odrive:/$ dump_errors 1
 
 ## CAN Protocols
 
-ODriveX 支持 CAN 通信方式，最高支持 1MBps 波特率。
+一帧 CAN 报文只能传 8 个字节数据，和 11 位的标准 Std-Id，这里把 Std-Id 的低 7 位也用作数据，用来传控制指令字 CMD，控制协议定义如下：
 
-CAN 报文格式定义如下：
+![image.png](./Image/odrivexcanmessage.jpg)
 
-![image.png](./Image/Can-Message.jpg)
+Device Id 占用 4 位，CMD 占用 7 位，Motor id 占用 1 个字节，协议最多两个参数：参数 1 占用 4 个字节，参数 2 占用 3 个字节。
 
-CAN 报文通常三个参数，Motor id 占用一个字节，参数 1 占用 4 个字节，参数 2 占用 3 个字节，由于参数 2 只有 3 个字节所以无法直接传递浮点数，要用整数量化浮点数。
+> Device Id：驱动器 ID，CMD 控制指令字，Motor id 被控电机编号。
+> 
+> 个别协议要两个参数，例如位置控制：设置目标位置和速度限制。
 
-> 其实 Motor id 不必占用一个字节，用 3 位 表示即可，虽然节约位数，但这样一来后面表示浮点参数的位数会变得非常割裂，取值要位操作可读性差。
-
-在下发控制报文时，需要把目标值的浮点数转为整形填入报文，参考转换方法如下，需要传入范围值与目标值，以及数据占用的位数。
+由于参数 2 只有 3 个字节所以无法直接传递浮点数，要用整数量化浮点数。在下发控制报文时，把浮点目标值量化为整形填入报文，参考转换方法如下。
 
 ```cpp
 uint32_t ODriveCAN::fto_i(float x, float x_min, float x_max, uint8_t bits)
@@ -305,6 +307,8 @@ uint32_t ODriveCAN::fto_i(float x, float x_min, float x_max, uint8_t bits)
     return (uint32_t)((x - ref) * ((float)((1 << bits) - 1)) / span);
 }
 ```
+
+> 其实 Motor id 不必占用 1 个字节，占用 3 位即可，虽然节约位数，但这样一来协议参数的表示位数会变得非常割裂，取值要位操作（可读性差）。
 
 具体指令在 [communication/can/odrive_can.cpp](./Firmware/communication/can/odrive_can.cpp) 这里定义，具体可以看这个文件。
 
